@@ -6,8 +6,9 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-    origin: process.env.CORS_ORIGIN,
-    credentials: true
+    origin: 'http://localhost:5173', // Allow requests from your frontend
+    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Specify allowed HTTP methods
+    credentials: true // Include cookies if necessary
 }));
 app.use(express.json({ limit: "16kb" }));
 app.use(urlencoded({ extended: true, limit: "16kb" }));

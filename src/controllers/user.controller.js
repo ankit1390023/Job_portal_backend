@@ -28,6 +28,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
     // Check if email already exists
     const existingUser = await User.findOne({ email });
+    console.log(existingUser);
     if (existingUser) {
         throw new apiError(400, "Email Already Exists");
     }
@@ -67,12 +68,18 @@ const registerUser = asyncHandler(async (req, res) => {
 
 const loginUser = asyncHandler(async (req, res) => {
 
-    const { email, fullName, password } = req.body;
-
+    const { identifier, password } = req.body; // Single field for email/phoneNumber
+    console.log(" identifier, password ", identifier, password);
+    // Check if identifier and password are provided
+    if (!identifier || !password) {
+        throw new apiError(400, "Both identifier and password are required");
+    }
     const user = await User.findOne({
-        $or: [{ email: email }, { fullName: fullName }]
+        $or: [{ email: identifier }, { phoneNumber: identifier }],
     });
 
+   
+console.log("user from lohgi user is ",user)
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
         throw new apiError(401, "Invalid email or password");
@@ -269,7 +276,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
             new apiResponse(404, null, "User not found")
         );
     }
-   
+
     return res.status(200).json(
         new apiResponse(200, user, "User Account Details Updated Successfully")
     );
