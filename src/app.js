@@ -6,7 +6,10 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-    origin: 'http://localhost:5173', // Allow requests from your frontend
+    origin: [
+        'http://localhost:5173', // Local development
+        'https://your-frontend-deployment.com' // Deployed frontend URL
+    ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Specify allowed HTTP methods
     credentials: true // Include cookies if necessary
 }));
