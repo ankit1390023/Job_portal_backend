@@ -4,13 +4,15 @@ import { User } from "../models/user.model.js";
 import { apiResponse } from "../utils.js/apiResponse.utils.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils.js/cloudinary.utils.js";
 import jwt from 'jsonwebtoken';
-// import { generateToken } from '../models/user.model.js';
 import bcrypt from 'bcrypt';
+import getDataUri from "../utils.js/dataURI.utils.js";
+import cloudinary from "../utils.js/file.cloudinary.utils.js";
+
 
 const generateAcessTokenAndRefreshToken = async (userId) => {
     try {
         const user = await User.findById(userId);
-        console.log(user)
+        console.log("from generate token", user)
         const accessToken = await user.genAccessToken();
         const refreshToken = await user.genRefreshToken();
 
@@ -24,11 +26,12 @@ const generateAcessTokenAndRefreshToken = async (userId) => {
     }
 }
 const registerUser = asyncHandler(async (req, res) => {
+    // console.log("HGCTJ LBLUI  YILG  UILL BIUG  UIH")
     const { fullName, email, password, phoneNumber, role, bio = "" } = req.body; // Default bio to an empty string if not provided
 
     // Check if email already exists
     const existingUser = await User.findOne({ email });
-    console.log(existingUser);
+    // console.log("existingUser from registerUser", existingUser);
     if (existingUser) {
         throw new apiError(400, "Email Already Exists");
     }
@@ -40,7 +43,7 @@ const registerUser = asyncHandler(async (req, res) => {
     // Upload to Cloudinary (assuming `uploadOnCloudinary` is a function that returns an object with `secure_url`)
     const avatar = avatarLocalFilePath ? await uploadOnCloudinary(avatarLocalFilePath) : null;
     const coverImage = coverImageLocalFilePath ? await uploadOnCloudinary(coverImageLocalFilePath) : null;
-
+    console.log("avtar from register is ", avatar);
     // Create new user with nested profile fields
     const user = await User.create({
         fullName,
@@ -65,11 +68,10 @@ const registerUser = asyncHandler(async (req, res) => {
         new apiResponse(200, createdUser, `Welcome ${createdUser.fullName}! You are registered successfully`)
     );
 });
-
 const loginUser = asyncHandler(async (req, res) => {
 
     const { identifier, password } = req.body; // Single field for email/phoneNumber
-    console.log(" identifier, password ", identifier, password);
+    // console.log(" identifier, password ", identifier, password);
     // Check if identifier and password are provided
     if (!identifier || !password) {
         throw new apiError(400, "Both identifier and password are required");
@@ -78,8 +80,8 @@ const loginUser = asyncHandler(async (req, res) => {
         $or: [{ email: identifier }, { phoneNumber: identifier }],
     });
 
-   
-console.log("user from lohgi user is ",user)
+
+    // console.log("user from lohgi user is ", user)
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
         throw new apiError(401, "Invalid email or password");
@@ -138,14 +140,14 @@ const refreshToken = asyncHandler(async (req, res) => {
         throw new apiError(400, "incomingRefreshToken Not found");
     }
     const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
-    console.log("decodedToken", decodedToken)
+    // console.log("decodedToken", decodedToken)
     //ye decodedToken conatain kr rha h user ki _id,ye hr haal, me verify hoga ydi incomingrefreshToken ka structure shi h,but,problem is that,how to check this is actual user ki hi _id h, kisi dusre ki bhi to _id ho skti h.. ese check krne k liye   (incomingRefreshToken != user.refreshToken) ese check kro
     const user = await User.findById(decodedToken._id);
     if (!user) {
         throw new apiError(400, "Unauthorized access due to invalid refrshtoken");
     }
-    console.log("user is", user)
-    console.log("user.refreshToken", user.refreshToken);
+    // console.log("user is", user)
+    // console.log("user.refreshToken", user.refreshToken);
     if (incomingRefreshToken != user.refreshToken) {
         throw new apiError(400, "refresh token is  expired or used");
     }
@@ -165,12 +167,12 @@ const refreshToken = asyncHandler(async (req, res) => {
         )
 })
 const changePassword = asyncHandler(async (req, res) => {
-    const { oldPassowrd, newPassword } = req.body;
-    // console.log("oldPassword", oldPassowrd);
+    const { oldPassword, newPassword } = req.body;
+    // console.log("oldPassword", oldPassword);
     // console.log("newPassword", newPassword);
     const user = await User.findById(req.user?._id);
     // console.log(user);
-    const isPasswordCorrect = await user.comparePassword(oldPassowrd);
+    const isPasswordCorrect = await user.comparePassword(oldPassword);
     console.log(isPasswordCorrect);
     if (!isPasswordCorrect) {
         throw new apiError(401, "Old password is incorrect");
@@ -183,7 +185,7 @@ const changePassword = asyncHandler(async (req, res) => {
 })
 const getCurrentUser = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user?._id).select('-password');
-    console.log(user);
+    // console.log(user);
     return res
         .status(200)
         .json(
@@ -239,48 +241,71 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         )
 })
 const updateAccountDetails = asyncHandler(async (req, res) => {
-    const { fullName, email, phoneNumber, bio, skills, role } = req.body;
-    const updateFields = {};
+    try {
+        const { fullName, email, phoneNumber, bio, skills } = req.body;
+        const file = req.file;
 
-    // Update only provided fields
-    if (fullName) updateFields.fullName = fullName;
-    if (email) updateFields.email = email;
-    if (phoneNumber) updateFields.phoneNumber = phoneNumber;
-    if (role) updateFields.role = role;
+        // Process skills
+        let skillsArray = [];
+        if (skills) {
+            skillsArray = skills.split(",").map(skill => skill.trim());
+        }
 
-    // Profile-specific updates
-    let updateProfile = {};
-    if (bio) updateProfile.bio = bio;
-    if (skills) {
-        const skillsArray = skills.split(',').map(skill => skill.trim());
-        updateProfile.skills = skillsArray;
+        // Get user ID from middleware
+        const userId = req.user._id;
+
+        // Find user in the database
+        let user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found.",
+                success: false,
+            });
+        }
+
+        // Update fields
+        if (fullName) user.fullName = fullName;
+        if (email) user.email = email;
+        if (phoneNumber) user.phoneNumber = phoneNumber;
+        if (bio) user.profile.bio = bio;
+        if (skills) user.profile.skills = skillsArray;
+
+        // Handle file upload for resume
+        if (file) {
+            const fileUri = getDataUri(file);
+            const cloudResponse = await cloudinary.uploader.upload(fileUri.content, {
+                resource_type: 'raw', // Ensure PDF files are uploaded correctly
+                folder: 'resumes',    // Optional: Organize files in Cloudinary
+            });
+            // Update user profile with resume details
+            user.profile.resume = cloudResponse.secure_url;
+            user.profile.resumeOriginalName = file.originalname;
+        }
+        // Save updated user details to the database
+        await user.save();
+        // Send response
+        return res.status(200).json({
+            message: "Profile updated successfully.",
+            user: {
+                _id: user._id,
+                fullName: user.fullName,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                role: user.role,
+                profile: user.profile,
+            },
+            success: true,
+        });
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        return res.status(500).json({
+            message: "An error occurred while updating the profile.",
+            success: false,
+            error: error.message,
+        });
     }
-    // const myString = "apple,banana,orange";  // Example string
-    // const array = myString.split(',');        // Split the string into an array
-
-
-    // Add profile updates if any exist
-    if (Object.keys(updateProfile).length > 0) { //check kr rha h ki updateProfile ka length kitna h,ydi 0 h, to profile me koi change nhi hua h,i.e (Skill,bio) no change ,ydi esa h to updateFiels ke profile me updateProfile ko update kr do,otherwise,leave as it is
-        updateFields.profile = updateProfile;
-    }
-
-    const user = await User.findByIdAndUpdate(
-        req.user?._id,
-        { $set: updateFields },
-        { new: true }
-    ).select('-password');
-
-    // Handle case where user is not found
-    if (!user) {
-        return res.status(404).json(
-            new apiResponse(404, null, "User not found")
-        );
-    }
-
-    return res.status(200).json(
-        new apiResponse(200, user, "User Account Details Updated Successfully")
-    );
 });
+
 export {
     registerUser,
     loginUser,

@@ -42,7 +42,10 @@ const userSchema = new mongoose.Schema({
             default: "",
         },
         skills: [{ type: String }],
-        resume: { type: String },
+        resume: {
+            type: String ,
+            default:""
+        },
         resumeOriginalName: { type: String },
         company: {
             type: mongoose.Schema.Types.ObjectId,
